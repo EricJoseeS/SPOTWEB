@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101411">
+  <title>YouTube · SpotWeb</title>
+  <style>
+    :root{color-scheme:dark;--green:#66df91;--text:#f2f5f2;--muted:#a0aaa2;--line:#303832;--panel:#171d19}
+    *{box-sizing:border-box}
+    body{margin:0;min-height:100vh;background:radial-gradient(ellipse at 82% 0%,#1d3928 0,transparent 38%),#101411;color:var(--text);font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+    header{height:68px;border-bottom:1px solid #ffffff14;display:flex;align-items:center;justify-content:space-between;padding:0 max(22px,calc((100vw - 1180px)/2))}
+    .brand{color:var(--green);font-weight:900;font-size:20px;text-decoration:none}
+    .back{color:var(--muted);text-decoration:none}.back:hover{color:var(--text)}
+    main{width:min(1180px,100%);margin:0 auto;padding:38px 24px 64px}
+    h1{font-size:clamp(28px,5vw,42px);line-height:1.1;margin:0 0 22px}
+    form{display:flex;gap:10px;max-width:760px;margin-bottom:28px}
+    input{min-width:0;flex:1;border:1px solid var(--line);border-radius:7px;background:#1a211c;color:var(--text);padding:14px 16px;font:inherit;outline:none}
+    input:focus{border-color:var(--green)}
+    button{border:0;border-radius:7px;background:var(--green);color:#092111;padding:0 22px;font:inherit;font-weight:700;font-size:15px;cursor:pointer}
+    button:hover{background:#8aefab}button:disabled{opacity:.6;cursor:wait}
+    .layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(320px,.9fr);gap:24px;align-items:start}
+    #results{display:grid;gap:8px}
+    .video{display:grid;grid-template-columns:168px minmax(0,1fr);gap:14px;padding:10px;border:1px solid transparent;border-radius:8px;cursor:pointer;text-align:left;color:inherit;background:transparent}
+    .video:hover,.video.selected{background:#ffffff0a;border-color:#ffffff18}
+    .video img{display:block;width:168px;aspect-ratio:16/9;object-fit:cover;border-radius:5px;background:#202620}
+    .video strong,.video small{display:block;overflow:hidden;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2}
+    .video strong{font-size:15px;line-height:1.35}.video small{color:var(--muted);margin-top:7px}
+    .status{color:var(--muted);padding:20px 10px}
+    .player{position:sticky;top:20px;overflow:hidden;border-radius:8px;background:#090b09;border:1px solid #ffffff18}
+    .frame{aspect-ratio:16/9}.frame iframe{display:block;width:100%;height:100%;border:0}
+    .player-caption{padding:12px 14px;color:var(--muted);font-size:13px}
+    @media(max-width:820px){main{padding:28px 16px 40px}.layout{grid-template-columns:1fr}.player{position:static;grid-row:1}header{padding:0 16px}}
+    @media(max-width:480px){form{gap:7px}button{padding:0 14px}.video{grid-template-columns:126px minmax(0,1fr);gap:10px;padding:7px}.video img{width:126px}.video strong{font-size:14px}}
+  </style>
+</head>
+<body>
+  <header><a class="brand" href="/">SpotWeb</a><a class="back" href="/">Voltar ao Audius</a></header>
+  <main>
+    <h1>Buscar no YouTube</h1>
+    <form id="search-form"><input id="query" name="q" maxlength="120" placeholder="Música, artista ou vídeo" autocomplete="off" required><button id="submit" type="submit">Buscar</button></form>
+    <section class="layout" aria-live="polite">
+      <div id="results"><div class="status">Pesquise vídeos para começar.</div></div>
+      <div class="player"><div class="frame" id="frame"><div class="status">Selecione um vídeo nos resultados.</div></div><div class="player-caption">Reprodução pelo player oficial do YouTube</div></div>
+    </section>
+  </main>
+  <script>
+    const form = document.querySelector('#search-form');
+    const input = document.querySelector('#query');
+    const results = document.querySelector('#results');
+    const submit = document.querySelector('#submit');
+    const frame = document.querySelector('#frame');
+    const escapeHtml = (value) => String(value || '').replace(/[&<>"']/g, (char) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
+
+    function play(video, button) {
+      document.querySelectorAll('.video').forEach((item) => item.classList.toggle('selected', item === button));
+      frame.innerHTML = `<iframe src="https://www.youtube-nocookie.com/embed/${encodeURIComponent(video.id)}?autoplay=1" title="${escapeHtml(video.title)}" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>`;
+    }
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const query = input.value.trim();
+      if (!query) return;
+      submit.disabled = true;
+      results.innerHTML = '<div class="status">Buscando…</div>';
+      try {
+        const response = await fetch(`/api/youtube/search?q=${encodeURIComponent(query)}`);
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Falha na busca.');
+        if (!data.videos.length) {
+          results.innerHTML = '<div class="status">Nenhum vídeo encontrado.</div>';
+          return;
+        }
+        results.innerHTML = data.videos.map((video, index) => `<button class="video" type="button" data-index="${index}"><img src="${escapeHtml(video.thumbnail)}" alt="" loading="lazy"><span><strong>${escapeHtml(video.title)}</strong><small>${escapeHtml(video.author)}${video.duration ? ` · ${escapeHtml(video.duration)}` : ''}</small></span></button>`).join('');
+        const videos = data.videos;
+        results.querySelectorAll('.video').forEach((button) => button.addEventListener('click', () => play(videos[Number(button.dataset.index)], button)));
+      } catch (error) {
+        results.innerHTML = `<div class="status">${escapeHtml(error.message)}</div>`;
+      } finally {
+        submit.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
